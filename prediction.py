@@ -1,8 +1,8 @@
 import argparse
 import tensorflow as tf
-import network
+import src.network as network
 import pickle
-import processing
+import src.processing as processing
 
 
 def write_not_predicted_values(filename, sequence):
