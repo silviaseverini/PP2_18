@@ -34,20 +34,20 @@ def create_network(X, Y, keep_prob, vocabulary, embedding_size, trained_embeddin
     embedding = embedding_layer(X, len(vocabulary.index_to_word), embedding_size, trained_embeddings)    
     #conv_flat = tf.layers.flatten(embedding)
      
-    conv1 = tf.layers.conv1d(inputs=embedding, filters=16, kernel_size=7, padding="valid", activation=tf.nn.leaky_relu)
+    conv1 = tf.layers.conv1d(inputs=embedding, filters=16, kernel_size=7, padding="same", activation=tf.nn.leaky_relu)
     pool1 = tf.layers.max_pooling1d(inputs=conv1, pool_size=2, strides=2)
 
-    #conv2 = tf.layers.conv1d(inputs=pool1, filters=32, kernel_size=7, padding="valid", activation=tf.nn.leaky_relu)
+    #conv2 = tf.layers.conv1d(inputs=pool1, filters=32, kernel_size=7, padding="same", activation=tf.nn.leaky_relu)
     #pool2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2)
     
-    conv_flat2 = tf.layers.flatten(conv1)
+    conv_flat2 = tf.layers.flatten(pool1)
 
-    fc1 = tf.layers.dense(inputs=conv_flat2, units=64, activation=tf.nn.leaky_relu)
+    fc1 = tf.layers.dense(inputs=conv_flat2, units=128, activation=tf.nn.leaky_relu)
     dropout1 = tf.nn.dropout(fc1, keep_prob)
-    #fc2 = tf.layers.dense(inputs=dropout1, units=128, activation=tf.nn.leaky_relu)
-    #dropout2 = tf.nn.dropout(fc2, keep_prob)
+    fc2 = tf.layers.dense(inputs=dropout1, units=64, activation=tf.nn.leaky_relu)
+    dropout2 = tf.nn.dropout(fc2, keep_prob)
     #fc3 = tf.layers.dense(inputs=dropout2, units=32, activation=tf.nn.leaky_relu)
     #dropout3 = tf.nn.dropout(fc3, keep_prob)
-    logits = tf.layers.dense(inputs=dropout1, units=2, activation=None)
+    logits = tf.layers.dense(inputs=dropout2, units=2, activation=None)
         
     return logits
