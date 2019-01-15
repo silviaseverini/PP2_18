@@ -32,12 +32,12 @@ def embedding_layer(input_x, vocabulary_size, embedding_size, trained_embeddings
 def create_network(X, Y, keep_prob, vocabulary, embedding_size, trained_embeddings=None):
     
     embedding = embedding_layer(X, len(vocabulary.index_to_word), embedding_size, trained_embeddings)    
-    conv_flat = tf.layers.flatten(embedding)
-    
-    conv1 = tf.layers.conv1d(inputs=embedding, filters=16, kernel_size=7, padding="valid", activation=tf.nn.relu)
+    #conv_flat = tf.layers.flatten(embedding)
+     
+    conv1 = tf.layers.conv1d(inputs=embedding, filters=16, kernel_size=7, padding="valid", activation=tf.nn.leaky_relu)
     pool1 = tf.layers.max_pooling1d(inputs=conv1, pool_size=2, strides=2)
 
-    #conv2 = tf.layers.conv1d(inputs=pool1, filters=32, kernel_size=7, padding="valid", activation=tf.nn.relu)
+    #conv2 = tf.layers.conv1d(inputs=pool1, filters=32, kernel_size=7, padding="valid", activation=tf.nn.leaky_relu)
     #pool2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2)
     
     conv_flat2 = tf.layers.flatten(conv1)
