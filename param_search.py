@@ -28,7 +28,7 @@ dropout_prob = float(args['dp'])
 batch_size = int(args['bs'])
 
 use_pretrained_embeddings = embedding_size == 100
-epochs = 500 # don't need this one
+epochs = 1000
 
 current_model_name = "model-{}-{}-{}-{}-{}-{}-{}".format(
   n_grams,
@@ -271,11 +271,8 @@ with tf.Session() as sess:
             total_losses.append(avg_loss) 
             total_accuracies.append(avg_accuracy)
 
-            #if (j+1) % 100 == 0:
-            #    print("Loss: " + str(avg_loss) + ", Accuracy: " + str(avg_accuracy))
-                    
             # Statistics on validation set
-            if (j+1) % 100 == 0:  
+            if (j+1) % 30 == 0:  
                 avg_accuracy, avg_loss, pred = sess.run([accuracy, loss, predictions], feed_dict={ 
                                                                                     tensor_X: X_val,
                                                                                     tensor_Y: Y_val,
@@ -286,19 +283,18 @@ with tf.Session() as sess:
                 if avg_accuracy > max_val_acc:
                     consecutive_validation_without_saving = 0
                     max_val_acc = avg_accuracy
-                    print("SAVE | Val loss: " + str(avg_loss) + ", accuracy: " + str(avg_accuracy))
+                    #print("SAVE | Val loss: " + str(avg_loss) + ", accuracy: " + str(avg_accuracy))
                     save_path = saver.save(sess, "./checkpoints/{}.ckpt".format(current_model_name))
                     consecutive_validation = 0
                 else:
                     consecutive_validation += 1
+
+            if consecutive_validation >= 20:
+            	break
             
-        if consecutive_validation >= 25:
-            print("Early stopping")
+        if consecutive_validation >= 20:
+            #print("Early stopping")
             break
-        
-        # Epoch statistics
-        #print("Epoch: " + str(i) + ", Loss: " + str(np.mean(np.array(total_losses))) + 
-        #      ", Acc: " + str(np.mean(np.array(total_accuracies))) + "\n")
 
 saver = tf.train.Saver()
 
@@ -311,10 +307,10 @@ with tf.Session() as sess:
                                             tensor_Y: Y_val,
                                             keep_prob: 1.0 })
 
-print(Y_val[-150:])
-print(pred[-150:])
-print("\nAccuracy :" + str(accuracy_score(Y_val, pred)))
-print("Precision :" + str(precision_score(Y_val, pred)))
-print("Recall :" + str(recall_score(Y_val, pred)))
-print("AUC :" + str(roc_auc_score(Y_val, pred)))
-print(" ---------------------- end ----------------------\n\n\n")
+f = open("results.txt","a+")
+acc = round(accuracy_score(Y_val, pred), 3)
+prec = round(precision_score(Y_val, pred), 3)
+rec = round(recall_score(Y_val, pred), 3)
+auc = round(roc_auc_score(Y_val, pred), 3)
+f.write(current_model_name + " " + str(acc) + " " + str(prec) + " " + str(rec) + " " + str(auc) + "\n")
+f.close()
