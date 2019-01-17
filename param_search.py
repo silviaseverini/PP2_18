@@ -289,10 +289,10 @@ with tf.Session() as sess:
                 else:
                     consecutive_validation += 1
 
-            if consecutive_validation >= 20:
+            if consecutive_validation >= 25:
             	break
             
-        if consecutive_validation >= 20:
+        if consecutive_validation >= 25:
             #print("Early stopping")
             break
 
