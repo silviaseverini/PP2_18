@@ -1,20 +1,20 @@
 import argparse
+import pickle
 import tensorflow as tf
 import src.network as network
-import pickle
-import src.processing as processing
-
-
-def write_not_predicted_values(filename, sequence):
-
-	for i in sequence:
-		filename.write(i + "\t" + "NA" + "\t" + "NA\n")
-
+import src.utils as utils
 
 parser = argparse.ArgumentParser(description='Generate your predictions')
 parser.add_argument('-i','--input', help='Input file path', required=True)
 parser.add_argument('-o','--output', help='Output file path', required=True)
 args = vars(parser.parse_args())
+
+# Params
+current_model_name = "model-0.0001-0.0001-1.0-64-32-128"
+
+splitted = current_model_name.split("-")
+embedding_size = int(splitted[4])
+hidden_cells = int(splitted[6])
 
 # Get lines in input file
 input_file = [line.rstrip('\n') for line in open(args["input"])]
@@ -22,70 +22,48 @@ input_file = [line.rstrip('\n') for line in open(args["input"])]
 # Divide headers and sequences
 headers = [input_file[i] for i in range(len(input_file)) if i % 2 == 0]
 sequences = [input_file[i] for i in range(len(input_file)) if i % 2 != 0]
-
-# Load vocab locally
-with open('./dumps/vocab.pickle', 'rb') as handle:
-    vocab = pickle.load(handle)
+assert(len(headers) == len(sequences))
 
 # Load parameters
-with open('./dumps/parameters.pickle', 'rb') as handle:
-    parameters = pickle.load(handle)
-
-# TF variables
-tf.reset_default_graph()
+with open('./dumps/dump.pickle', 'rb') as handle:
+    dumped = pickle.load(handle)
+vocab = dumped["vocab"]
+max_length_seq = dumped["X_train"].shape[1]
 
 # Placeholders
-tensor_X = tf.placeholder(tf.int32, (None, parameters["timestamps"]), 'inputs')
-tensor_Y = tf.placeholder(tf.int32, (None), 'output')
-keep_prob = tf.placeholder(tf.float32, (None), 'dropout_input')
+tensor_X = tf.placeholder(tf.int32, (None, max_length_seq), 'inputs')
+tensor_Y = tf.placeholder(tf.int32, (None, None), 'outputs')
+keep_prob = tf.placeholder(tf.float32, (None), 'dropout_keep')
 
-# Create graph for the network
-logits = network.create_network(tensor_X, tensor_Y, keep_prob, vocab, parameters["embedding_size"])
+# Network
+logits, mask, sequence_length = network.create_network(tensor_X, tensor_Y, keep_prob, vocab, embedding_size, hidden_cells)
+
+# Useful tensors
 scores = tf.nn.softmax(logits)
-predictions = tf.to_int32(tf.argmax(scores, axis=1))
+predictions = tf.to_int32(tf.argmax(scores, axis=2))
 
-# TF inference
-saver = tf.train.Saver()
 with tf.Session() as sess:
+	saver = tf.train.Saver()
 	sess.run(tf.global_variables_initializer())
-	saver.restore(sess, "./checkpoints/model.ckpt") 
-
-	print("Model restored.")
+	sess.run(tf.local_variables_initializer())
+	saver.restore(sess, "./checkpoints/{}.ckpt".format(current_model_name))
 
 	# Create output file
-	file = open(args["output"],"w") 
- 
-	for i in range(len(sequences)):
+	file = open(args["output"], "w") 
+	
+	for i in range(len(headers)):
 		# Write header
 		file.write(headers[i] + "\n") 
-		
-		# Create ngrams from sequence for inputs
-		X, _ = processing.create_input([sequences[i]], None, parameters["sliding_window_size"], parameters["n_grams"])
 
-		# Find residues that are not possible to be predicted (because of sliding window approach) => Solution could be padding
-		tmp = int(0.5 * parameters["sliding_window_size"] - 0.5)
+		tmp = utils.pad_sentence(vocab.text_to_indices(list(sequences[i])), max_length_seq)
 
-		# Print on file extremes of sequence 
-		write_not_predicted_values(file, sequences[i][:tmp])
-		k = 0
-		for j in range(len(X)):
-			central_gram_index = len(X[j]) // 2
-			central_residue_index = len(X[j][central_gram_index]) // 2
+		certainty, pred = sess.run([scores, predictions], feed_dict={ tensor_X: [tmp], 
+												 					  keep_prob: 1.0  })
 
-			# Debug
-			assert(sequences[i][tmp+k] == X[j][central_gram_index][central_residue_index])
-			k+=1
+		for j in range(len(sequences[i])):
+			file.write(sequences[i][j] + "\t" + str('+' if pred[0][j] == 1 else '-') + "\t" + str(round(max(certainty[0][j]), 3)) + "\n")
 
-			# Perform inference
-			certainty, pred = sess.run([scores, predictions], feed_dict={tensor_X: [vocab.text_to_indices(X[j])], keep_prob: 1.0 })
-			file.write(X[j][central_gram_index][central_residue_index] + "\t" + 
-				str('+' if pred[0] == 1 else '-') + "\t" + 
-				str(round(max(certainty[0]),3)) + "\n") 
+	file.close()
 
-		write_not_predicted_values(file, sequences[i][-tmp:])
 
-	file.close() 
-
-	print("End prediction.")
-	print("!!!! WARNING 1 !!!: In the output file, instead of percentage > 50 is class 1 and < 50 is class 0, I have a softmax as last layer, so I display the certainty that this is the class (100% means that the model is sure this is the correct class)")
-	print("!!! WARNING 2 !!!: Some predictions will be NA, because at the extremes of the sequence, I cannot predict those residues, because of the sliding window approach")
+print("!!!! WARNING 1 !!!: In the output file, instead of percentage > 50 is class 1 and < 50 is class 0, I have a softmax as last layer, so I display the certainty that this is the class (100% means that the model is sure this is the correct class)")

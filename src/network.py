@@ -1,4 +1,18 @@
 import tensorflow as tf
+import biovec
+import numpy as np
+
+def loadEmbeddings(vocab, filename, embedding_size):
+    pv_model = biovec.models.load_protvec(filename)
+    trained_embeddings = []
+    
+    for key in vocab.word_to_index.keys():
+        if key != "<PAD>":
+            trained_embeddings.append(pv_model[key])  
+        else:
+            trained_embeddings.append(np.random.uniform(-1.0, 1.0, embedding_size))      
+        
+    return np.array(trained_embeddings)
 
 
 def new_weights(shape, name=None):
@@ -29,25 +43,40 @@ def embedding_layer(input_x, vocabulary_size, embedding_size, trained_embeddings
     return layer
 
 
-def create_network(X, Y, keep_prob, vocabulary, embedding_size, trained_embeddings=None):
+def create_network(X, Y, keep_prob, vocabulary, embedding_size, hidden_cells, trained_embeddings=None, verbose=0):
     
-    embedding = embedding_layer(X, len(vocabulary.index_to_word), embedding_size, trained_embeddings)    
-    #conv_flat = tf.layers.flatten(embedding)
-     
-    conv1 = tf.layers.conv1d(inputs=embedding, filters=16, kernel_size=7, padding="same", activation=tf.nn.leaky_relu)
-    pool1 = tf.layers.max_pooling1d(inputs=conv1, pool_size=2, strides=2)
-
-    #conv2 = tf.layers.conv1d(inputs=pool1, filters=32, kernel_size=7, padding="same", activation=tf.nn.leaky_relu)
-    #pool2 = tf.layers.max_pooling1d(inputs=conv2, pool_size=2, strides=2)
+    # Calculate length without padding
+    mask_decoder_input = tf.cast(tf.sign(X), tf.float32)
+    sequence_length = tf.cast(tf.reduce_sum(mask_decoder_input, 1), tf.int32)
     
-    conv_flat2 = tf.layers.flatten(pool1)
+    # Embedding layer
+    embedding = embedding_layer(X, len(vocabulary.index_to_word), embedding_size, trained_embeddings)
+    
+    # Bidirectional LSTM cell
+    lstm_fw_cell = tf.contrib.rnn.LSTMCell(hidden_cells)
+    lstm_bw_cell = tf.contrib.rnn.LSTMCell(hidden_cells)
 
-    fc1 = tf.layers.dense(inputs=conv_flat2, units=128, activation=tf.nn.leaky_relu)
-    dropout1 = tf.nn.dropout(fc1, keep_prob)
-    fc2 = tf.layers.dense(inputs=dropout1, units=64, activation=tf.nn.leaky_relu)
-    dropout2 = tf.nn.dropout(fc2, keep_prob)
-    #fc3 = tf.layers.dense(inputs=dropout2, units=32, activation=tf.nn.leaky_relu)
-    #dropout3 = tf.nn.dropout(fc3, keep_prob)
-    logits = tf.layers.dense(inputs=dropout2, units=2, activation=None)
+    # Dropout on LSTM cells
+    dropout_fw = tf.contrib.rnn.DropoutWrapper(lstm_fw_cell, input_keep_prob=keep_prob, output_keep_prob=keep_prob)
+    dropout_bw = tf.contrib.rnn.DropoutWrapper(lstm_bw_cell, input_keep_prob=keep_prob, output_keep_prob=keep_prob)
+    
+    (outputs_fw, outputs_bw), _ = tf.nn.bidirectional_dynamic_rnn(dropout_fw, 
+                                                                  dropout_bw, 
+                                                                  embedding, 
+                                                                  dtype=tf.float32,
+                                                                  sequence_length=sequence_length)
         
-    return logits
+    # Concat outputs
+    outputs_concat = tf.concat([outputs_fw, outputs_bw], 2)
+    
+    # FC layer
+    fc1 = tf.layers.dense(inputs=outputs_concat, units=hidden_cells, activation=tf.nn.leaky_relu)
+    logits = tf.layers.dense(inputs=fc1, units=2, activation=None)
+    
+    if verbose:
+        print(embedding)
+        print(outputs_concat)
+        print(fc1)
+        print(logits)
+    
+    return logits, mask_decoder_input, sequence_length
